@@ -1,16 +1,13 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import numpy as np
 import tensorflow as tf
-from sklearn.utils import shuffle
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
 from tensorflow.examples.tutorials.mnist import input_data
+from tensorflow.contrib import predictor
 
 DATA_DIR = './data/fashion'
+MODEL_DIR = './model/fashion'
 
 
 def cnn_model_fn(features, labels, mode):
@@ -101,25 +98,23 @@ def cnn_model_fn(features, labels, mode):
 
     # Add evaluation metrics (for EVAL mode)
     eval_metric_ops = {
-        "accuracy": tf.metrics.accuracy(
-            labels=labels, predictions=predictions["classes"])}
+        'accuracy': tf.metrics.accuracy(
+            labels=labels, predictions=predictions['classes'])}
     return tf.estimator.EstimatorSpec(
         mode=mode, loss=loss, eval_metric_ops=eval_metric_ops)
 
 
 def main(unused_argv):
-    # Load training and eval data
-    mnist = input_data.read_data_sets(DATA_DIR, one_hot=False, validation_size=0)
-    train_data = mnist.train.images  # Returns np.array
+    # Load data
+    mnist = input_data.read_data_sets(DATA_DIR, one_hot=False, )
+    train_data = mnist.train.images
     train_labels = np.asarray(mnist.train.labels, dtype=np.int32)
-    train_data, train_labels = shuffle(train_data, train_labels)
-    eval_data = mnist.test.images  # Returns np.array
-    eval_labels = np.asarray(mnist.test.labels, dtype=np.int32)
-    eval_data, eval_labels = shuffle(eval_data, eval_labels)
+    validation_data = mnist.validation.images
+    validation_labels = np.asarray(mnist.validation.labels, dtype=np.int32)
 
     # Create the Estimator
     mnist_classifier = tf.estimator.Estimator(
-        model_fn=cnn_model_fn, model_dir="/tmp/mnist_convnet_model")
+        model_fn=cnn_model_fn, model_dir=MODEL_DIR)
 
     # Train the model
     train_input_fn = tf.estimator.inputs.numpy_input_fn(
@@ -129,20 +124,62 @@ def main(unused_argv):
         num_epochs=None,
         shuffle=True)
 
-    # Evaluate the model and print results
-    eval_input_fn = tf.estimator.inputs.numpy_input_fn(
-        x={"x": eval_data},
-        y=eval_labels,
+    # Test the model and print results
+    validate_input_fn = tf.estimator.inputs.numpy_input_fn(
+        x={'x': validation_data},
+        y=validation_labels,
         num_epochs=1,
         shuffle=False)
 
-    for j in range(100):
+    best_model_path = None
+    best_accuracy = 0.0
+    degradation_block_cnt = 0
+    for _ in range(200):
         mnist_classifier.train(
             input_fn=train_input_fn,
-            steps=2000)
+            steps=100)
 
-        eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn)
-        print(eval_results)
+        intermediate_results = mnist_classifier.evaluate(
+            input_fn=validate_input_fn)
+        current_accuracy = intermediate_results['accuracy']
+        if current_accuracy <= best_accuracy:
+            degradation_block_cnt += 1
+            print('===\nDegradation detected: last {} blocks accuracy decreases. Best: {}, current: {}'.format(degradation_block_cnt, best_accuracy, current_accuracy))
+        else:
+            best_accuracy = current_accuracy
+            print('===\nAccuracy increases: best is now {}'.format(best_accuracy))
+            degradation_block_cnt = 0
+            best_model_path = mnist_classifier.export_savedmodel(
+                MODEL_DIR,
+                serving_input_receiver_fn=serving_input_receiver_fn)
+        if degradation_block_cnt >= 5:
+            print('===\nEarly stopped because degradation block count exceeded threshold. Best model has accuracy {} and is located under {}'.format(best_accuracy, best_model_path))
+            final_results = test_model_located_in(best_model_path, mnist)
+            print('===\nFinal accuracy: ', final_results)
+            # didn't find way to stop estimator, so will exit(0)
+            exit(0)
+
+    final_results = test_model_located_in(best_model_path, mnist)
+    print('===\nFinal accuracy: ', final_results)
+
+def test_model_located_in(dir, mnist):
+    # Test the model and return accuracy
+    test_data = mnist.test.images
+    test_labels = np.asarray(mnist.test.labels, dtype=np.int32)
+    predict_fn = predictor.from_saved_model(dir)
+    prediction = predict_fn({'x': test_data})
+    correct = 0
+    for p, a in zip(prediction['classes'], test_labels):
+        if p == a:
+            correct += 1
+
+    return correct / len(mnist.test.images)
+
+def serving_input_receiver_fn():
+    inputs = {
+        'x': tf.placeholder(tf.float32, [None, 784])
+        }
+    return tf.estimator.export.ServingInputReceiver(inputs, inputs)
 
 
 if __name__ == "__main__":
