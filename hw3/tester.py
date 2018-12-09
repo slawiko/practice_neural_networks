@@ -5,9 +5,6 @@ import numpy as np
 from tensorflow.contrib import predictor
 from tensorflow.examples.tutorials.mnist import input_data
 
-path_to_model = sys.argv[-1]
-path_to_data = sys.argv[-2]
-
 def test_model_located_in(dir, mnist):
     test_data = mnist.test.images
     test_labels = np.asarray(mnist.test.labels, dtype=np.int32)
@@ -21,6 +18,9 @@ def test_model_located_in(dir, mnist):
     return correct / len(mnist.test.images)
 
 
-data = input_data.read_data_sets(path_to_data, one_hot=False)
+if __name__ == "__main__":
+    path_to_model = sys.argv[-1]
+    path_to_data = sys.argv[-2]
 
-test_model_located_in(path_to_model, data)
+    data = input_data.read_data_sets(path_to_data, one_hot=False)
+    print("Accuracy: ", test_model_located_in(path_to_model, data))
