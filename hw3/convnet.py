@@ -1,13 +1,12 @@
 import numpy as np
 import tensorflow as tf
+from tensorflow.examples.tutorials.mnist import input_data
+
+from tester import test_model_located_in
 
 tf.logging.set_verbosity(tf.logging.INFO)
-
-from tensorflow.examples.tutorials.mnist import input_data
-from tensorflow.contrib import predictor
-
 DATA_DIR = './data/fashion'
-MODEL_DIR = './model/fashion/tuned_1'
+MODEL_DIR = './model/fashion/2xtwoBy3_woRELU_between'
 
 
 def cnn_model_fn(features, labels, mode):
@@ -18,29 +17,18 @@ def cnn_model_fn(features, labels, mode):
     input_layer = tf.reshape(features["x"], [-1, 28, 28, 1])
 
     # Convolutional Layer #1
-    # Computes 32 features using a 3x3 filter.
+    # Computes 32 features using two 3x3 filter.
     # Padding is added to preserve width and height.
     # Input Tensor Shape: [batch_size, 28, 28, 1]
     # Output Tensor Shape: [batch_size, 28, 28, 32]
-    conv1 = tf.layers.conv2d(
+    conv1_1 = tf.layers.conv2d(
         inputs=input_layer,
         filters=32,
         kernel_size=[3, 3],
         padding="same")
 
-    # Add dropout operation; 0.6 probability that element will be kept
-    # dropout1 = tf.layers.dropout(
-    #     inputs=conv1,
-    #     rate=0.7,
-    #     training=mode == tf.estimator.ModeKeys.TRAIN)
-
-    # Convolutional Layer #2
-    # Computes 32 features using a 3x3 filter with ReLU activation.
-    # Padding is added to preserve width and height.
-    # Input Tensor Shape: [batch_size, 28, 28, 32]
-    # Output Tensor Shape: [batch_size, 28, 28, 32]
-    conv2 = tf.layers.conv2d(
-        inputs=conv1,
+    conv1_2 = tf.layers.conv2d(
+        inputs=conv1_1,
         filters=32,
         kernel_size=[3, 3],
         padding="same",
@@ -50,17 +38,23 @@ def cnn_model_fn(features, labels, mode):
     # First max pooling layer with a 2x2 filter and stride of 2
     # Input Tensor Shape: [batch_size, 28, 28, 32]
     # Output Tensor Shape: [batch_size, 14, 14, 32]
-    pool1 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
+    pool1 = tf.layers.max_pooling2d(inputs=conv1_2, pool_size=[2, 2], strides=2)
 
-    # Convolutional Layer #3
-    # Computes 64 features using a 5x5 filter.
+    # Convolutional Layer #2
+    # Computes 64 features using two 3x3 filter.
     # Padding is added to preserve width and height.
-    # Input Tensor Shape: [batch_size, 14, 14, 32]
+    # Input Tensor Shape: [batch_size, 14, 14, 64]
     # Output Tensor Shape: [batch_size, 14, 14, 64]
-    conv3 = tf.layers.conv2d(
+    conv2_1 = tf.layers.conv2d(
         inputs=pool1,
         filters=64,
-        kernel_size=[5, 5],
+        kernel_size=[3, 3],
+        padding="same")
+
+    conv2_2 = tf.layers.conv2d(
+        inputs=conv2_1,
+        filters=64,
+        kernel_size=[3, 3],
         padding="same",
         activation=tf.nn.relu)
 
@@ -68,7 +62,7 @@ def cnn_model_fn(features, labels, mode):
     # Second max pooling layer with a 2x2 filter and stride of 2
     # Input Tensor Shape: [batch_size, 14, 14, 64]
     # Output Tensor Shape: [batch_size, 7, 7, 64]
-    pool2 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[2, 2], strides=2)
+    pool2 = tf.layers.max_pooling2d(inputs=conv2_2, pool_size=[2, 2], strides=2)
 
     # Flatten tensor into a batch of vectors
     # Input Tensor Shape: [batch_size, 7, 7, 64]
@@ -123,7 +117,7 @@ def cnn_model_fn(features, labels, mode):
 
 def main(unused_argv):
     # Load data
-    mnist = input_data.read_data_sets(DATA_DIR, one_hot=False, )
+    mnist = input_data.read_data_sets(DATA_DIR, one_hot=False)
     train_data = mnist.train.images
     train_labels = np.asarray(mnist.train.labels, dtype=np.int32)
     validation_data = mnist.validation.images
@@ -178,18 +172,6 @@ def main(unused_argv):
 
     final_results = test_model_located_in(best_model_path, mnist)
     print('===\nFinal accuracy {}, model is located under {}\n'.format(final_results, best_model_path))
-
-def test_model_located_in(dir, mnist):
-    test_data = mnist.test.images
-    test_labels = np.asarray(mnist.test.labels, dtype=np.int32)
-    predict_fn = predictor.from_saved_model(dir)
-    prediction = predict_fn({'x': test_data})
-    correct = 0
-    for p, a in zip(prediction['classes'], test_labels):
-        if p == a:
-            correct += 1
-
-    return correct / len(mnist.test.images)
 
 def serving_input_receiver_fn():
     inputs = {
