@@ -90,7 +90,7 @@ def cnn_model_fn(features, labels, mode):
 
     # Configure the Training Op (for TRAIN mode)
     if mode == tf.estimator.ModeKeys.TRAIN:
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.001)
+        optimizer = tf.train.MomentumOptimizer(learning_rate=0.001, momentum=0.8, use_nesterov=True)
         train_op = optimizer.minimize(
             loss=loss,
             global_step=tf.train.get_global_step())
@@ -144,26 +144,25 @@ def main(unused_argv):
         current_accuracy = intermediate_results['accuracy']
         if current_accuracy <= best_accuracy:
             degradation_block_cnt += 1
-            print('===\nDegradation detected: last {} blocks accuracy decreases. Best: {}, current: {}'.format(degradation_block_cnt, best_accuracy, current_accuracy))
+            print('\nDegradation detected: last {} blocks accuracy decreases. Best: {}, current: {}\n'.format(degradation_block_cnt, best_accuracy, current_accuracy))
         else:
             best_accuracy = current_accuracy
-            print('===\nAccuracy increases: best is now {}'.format(best_accuracy))
+            print('\nAccuracy increases: now best is {}\n'.format(best_accuracy))
             degradation_block_cnt = 0
             best_model_path = mnist_classifier.export_savedmodel(
                 MODEL_DIR,
                 serving_input_receiver_fn=serving_input_receiver_fn)
         if degradation_block_cnt >= 5:
-            print('===\nEarly stopped because degradation block count exceeded threshold. Best model has accuracy {} and is located under {}'.format(best_accuracy, best_model_path))
+            print('\nEarly stopped because degradation block count exceeded threshold. Best model has accuracy {} and is located under {}\n'.format(best_accuracy, best_model_path))
             final_results = test_model_located_in(best_model_path, mnist)
-            print('===\nFinal accuracy: ', final_results)
+            print('\nFinal accuracy: {}\n'.format(final_results))
             # didn't find way to stop estimator, so will exit(0)
             exit(0)
 
     final_results = test_model_located_in(best_model_path, mnist)
-    print('===\nFinal accuracy: ', final_results)
+    print('===\nFinal accuracy {}, model is located under {}\n'.format(final_results, best_model_path))
 
 def test_model_located_in(dir, mnist):
-    # Test the model and return accuracy
     test_data = mnist.test.images
     test_labels = np.asarray(mnist.test.labels, dtype=np.int32)
     predict_fn = predictor.from_saved_model(dir)
