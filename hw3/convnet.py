@@ -6,7 +6,7 @@ from tester import test_model_located_in
 
 tf.logging.set_verbosity(tf.logging.INFO)
 DATA_DIR = './data/fashion'
-MODEL_DIR = './model/fashion/2xtwoBy3_woRELU_between'
+MODEL_DIR = './model/fashion/'
 
 
 def cnn_model_fn(features, labels, mode):
@@ -101,7 +101,7 @@ def cnn_model_fn(features, labels, mode):
 
     # Configure the Training Op (for TRAIN mode)
     if mode == tf.estimator.ModeKeys.TRAIN:
-        optimizer = tf.train.MomentumOptimizer(learning_rate=0.001, momentum=0.8, use_nesterov=True)
+        optimizer = tf.train.MomentumOptimizer(learning_rate=0.001, momentum=0.9, use_nesterov=True)
         train_op = optimizer.minimize(
             loss=loss,
             global_step=tf.train.get_global_step())
